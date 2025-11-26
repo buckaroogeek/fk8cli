@@ -1,6 +1,6 @@
 module buckaroogeek.com/fk8cli
 
-go 1.25.3
+go 1.25
 
 require (
 	github.com/bitfield/script v0.24.1 // indirect

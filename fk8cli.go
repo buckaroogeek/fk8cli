@@ -9,12 +9,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Initiates cli parser, then calls Run to launch
-// RunAction
+// Initiates cli parser
+// Set up log file
+// Install kubernetes stack
+// Configure and start stack on node
 
 package fk8cli
 
 import (
+	"log"
+	"os"
+
 	"buckaroogeek.com/fk8cli/internal/initialize"
 	// "buckaroogeek.com/fk8cli/internal/logger"
 	"buckaroogeek.com/fk8cli/internal/node"
@@ -27,5 +32,14 @@ func Main() {
 	//parse flags
 	cfg := initialize.ParseFlags()
 
-	node.Install(cfg)
+	// create log file
+	if _, err := os.Create(cfg.FileName()); err != nil {
+		log.Fatal(err)
+	}
+
+	// install kubernetes stack
+	err := node.Install(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

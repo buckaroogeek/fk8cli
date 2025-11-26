@@ -17,7 +17,10 @@ package initialize
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/bitfield/script"
 )
@@ -30,13 +33,14 @@ func ParseFlags() *Config {
 	flag.BoolVar(&cfg.isWorker, "w", cfg.isWorker, "Configure as a worker node")
 	flag.BoolVar(&cfg.isSingle, "s", cfg.isSingle, "Configure as a single node (control plane + worker)")
 	flag.BoolVar(&cfg.isQuiet, "q", cfg.isQuiet, "Enable verbose output")
+	flag.BoolVar(&cfg.taint, "taint", cfg.taint, "Set taint on control plane node")
 	flag.BoolVar(&cfg.isGo, "y", cfg.isGo, "Proceed with installation")
 
 	flag.Usage = showHelp
 	flag.Parse()
 
 	// check root access
-	checkRoot()
+	checkSudo()
 
 	// user must not combine -s with -c or -w
 	if cfg.isSingle {
@@ -46,6 +50,7 @@ func ParseFlags() *Config {
 		// toggle control and worker to true given isSingle is set
 		cfg.isControl = true
 		cfg.isWorker = true
+		cfg.taint = true
 	}
 
 	// check that at least one role is set
@@ -59,8 +64,14 @@ func ParseFlags() *Config {
 	// Check for version argument
 	checkVersion(cfg)
 
+	// Create logfile name
+	buildLogFileName(cfg)
+
 	// Build list of rpms to install
 	buildRPMList(cfg)
+
+	// Retrieve user name
+	getUserName(cfg)
 
 	// Show configuration
 	showConfiguration(cfg)
@@ -83,14 +94,18 @@ func showHelp() {
 	fmt.Println("  -w  Configure as a worker node")
 	fmt.Println("  -s  Configure as a single node (control plane + worker)")
 	fmt.Println("  -q  Enable quiet output")
-	fmt.Println("  -h  Show this help message")
+	fmt.Println("\n  -taint  Set taint on control plane node")
+	fmt.Println("          Taint set automatically on single node")
+	fmt.Println("\n  -h  Show this help message")
 	fmt.Println("\nAt least one of -c, -w, or -s must be specified")
 	fmt.Println("The -y flag is required to install Kubernetes and configure the machine as a node")
-	fmt.Println("fk8cli must be run with root access (sudo)")
+	fmt.Println("fk8cli user must have sudo")
+	fmt.Println("Run dnf update before using this utility")
 }
 
 // show to-be configuration
 func showConfiguration(cfg *Config) {
+	fmt.Println("USER:", cfg.User())
 	fmt.Println("CONFIGURATION:")
 	fmt.Println("   Kubernetes version: ", cfg.Tag())
 	fmt.Println("   CRI-Tools version:  ", cfg.Tag())
@@ -99,7 +114,7 @@ func showConfiguration(cfg *Config) {
 	fmt.Println("   Container Runtime")
 	fmt.Println("      crun\n")
 	fmt.Println("PACKAGES:")
-	script.Exec("dnf list " + cfg.Rpms() + " --available").
+	script.Exec("sudo dnf list " + cfg.Rpms() + " --available").
 		Last(len(cfg.rpms)).
 		FilterLine(func(line string) string {
 			return "   " + line
@@ -107,11 +122,17 @@ func showConfiguration(cfg *Config) {
 		Stdout()
 	fmt.Println("\nROLES:")
 	if cfg.isControl {
-		fmt.Println("   Control node")
+		var withstr string
+		withstr = " without"
+		if cfg.SetTaint() {
+			withstr = " with"
+		}
+		fmt.Println("   Control plane" + withstr + " taint")
 	}
 	if cfg.isWorker {
-		fmt.Println("   Worker node")
+		fmt.Println("   Worker")
 	}
+	fmt.Println("\nLOG: ", cfg.FileName())
 }
 
 // show help and exit with exit code
@@ -125,8 +146,26 @@ func showHelpAndExit(msg string, exitcode int) {
 	os.Exit(exitcode)
 }
 
+// build log file name
+func buildLogFileName(cfg *Config) {
+	t := time.Now()
+	cfg.filename = "fk8cli_" + t.Format(time.DateOnly) + ".log"
+}
+
 // create array of rpm names to install
 func buildRPMList(cfg *Config) {
 	k8 := "kubernetes" + cfg.version
-	cfg.rpms = append(cfg.rpms, k8, k8+"-client", k8+"-kubeadm", "cri-o"+cfg.version, "crun")
+	cfg.rpms = append(cfg.rpms, k8, k8+"-client", k8+"-kubeadm",
+		"cri-o"+cfg.version,
+		"cri-tools"+cfg.version,
+		"crun")
+}
+
+// retrieve user name
+func getUserName(cfg *Config) {
+	user, err := script.Exec("logname").String()
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfg.user = strings.TrimSpace(user)
 }

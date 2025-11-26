@@ -12,12 +12,19 @@ limitations under the License.
 // Sets up logging - log (eventually) to file and to
 // stdout if verbose
 
-
 package logger
 
 import (
 	"fmt"
+	"log"
 )
+
+// check function to call log.Fatal
+func CheckFatal(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 func Log(token string) {
 	fmt.Println("***", token)

@@ -19,12 +19,15 @@ import (
 
 // configuration for node set up
 type Config struct {
+	filename  string
 	isControl bool
 	isGo      bool
 	isQuiet   bool
 	isSingle  bool
 	isWorker  bool
+	user      string
 	rpms      []string
+	taint     bool
 	version   string
 }
 
@@ -36,6 +39,7 @@ func NewConfig() *Config {
 		isWorker:  false,
 		isSingle:  false,
 		isQuiet:   false,
+		taint:     false,
 		version:   "none",
 	}
 
@@ -44,14 +48,34 @@ func NewConfig() *Config {
 
 // Methods
 
+// Return log file name
+func (cfg *Config) FileName() string {
+	return cfg.filename
+}
+
+// Return verbose boolean
+func (cfg *Config) IsVerbose() bool {
+	return !cfg.isQuiet
+}
+
 // Return list of rpms as single string
 func (cfg *Config) Rpms() string {
 	return strings.Join(cfg.rpms, " ")
 }
 
+// Return taint boolean
+func (cfg *Config) SetTaint() bool {
+	return cfg.taint
+}
+
 // Return target version for k8s
 func (cfg *Config) Tag() string {
 	return "v" + cfg.version
+}
+
+// Return user name
+func (cfg *Config) User() string {
+	return cfg.user
 }
 
 // Return target version for k8s

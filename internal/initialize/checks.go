@@ -24,7 +24,6 @@ import (
 // sanity check for Fedora
 // exits program with message if not Fedora
 func CheckFedora() {
-
 	_, err := script.File("/etc/redhat-release").Match("Fedora").CountLines()
 	if err != nil {
 		fmt.Println("Fedora is required")
@@ -37,6 +36,15 @@ func CheckFedora() {
 func checkRoot() {
 	if os.Geteuid() != 0 {
 		showHelpAndExit("Root access is required", 1)
+	}
+}
+
+// sanity check for sudo permissions
+// exits program with message if not Fedora
+func checkSudo() {
+	_, err := script.Exec("sudo -n true").String()
+	if err != nil {
+		showHelpAndExit("Sudo is required", 1)
 	}
 }
 
