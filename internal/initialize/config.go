@@ -25,9 +25,11 @@ type Config struct {
 	isQuiet   bool
 	isSingle  bool
 	isWorker  bool
-	user      string
+	localrpms bool
+	rpmfiles  []string
 	rpms      []string
 	taint     bool
+	user      string
 	version   string
 }
 
@@ -39,6 +41,7 @@ func NewConfig() *Config {
 		isWorker:  false,
 		isSingle:  false,
 		isQuiet:   false,
+		localrpms: false,
 		taint:     false,
 		version:   "none",
 	}
@@ -56,6 +59,16 @@ func (cfg *Config) FileName() string {
 // Return verbose boolean
 func (cfg *Config) IsVerbose() bool {
 	return !cfg.isQuiet
+}
+
+// Return localrpms boolean
+func (cfg *Config) LocalRpms() bool {
+	return cfg.localrpms
+}
+
+// Return list of local rpmfiles as single string
+func (cfg *Config) Rpmfiles() string {
+	return strings.Join(cfg.rpmfiles, " ")
 }
 
 // Return list of rpms as single string

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ func ParseFlags() *Config {
 	flag.BoolVar(&cfg.isControl, "c", cfg.isControl, "Configure as a control plane node")
 	flag.BoolVar(&cfg.isWorker, "w", cfg.isWorker, "Configure as a worker node")
 	flag.BoolVar(&cfg.isSingle, "s", cfg.isSingle, "Configure as a single node (control plane + worker)")
+	flag.BoolVar(&cfg.localrpms, "l", cfg.localrpms, "Install rpms in local directory")
 	flag.BoolVar(&cfg.isQuiet, "q", cfg.isQuiet, "Enable verbose output")
 	flag.BoolVar(&cfg.taint, "taint", cfg.taint, "Set taint on control plane node")
 	flag.BoolVar(&cfg.isGo, "y", cfg.isGo, "Proceed with installation")
@@ -93,6 +95,8 @@ func showHelp() {
 	fmt.Println("  -c  Configure as a control plane node")
 	fmt.Println("  -w  Configure as a worker node")
 	fmt.Println("  -s  Configure as a single node (control plane + worker)")
+	fmt.Println("  -l  Install rpms from local directory")
+	fmt.Println("      Local rpms replace rpms from repo")
 	fmt.Println("  -q  Enable quiet output")
 	fmt.Println("\n  -taint  Set taint on control plane node")
 	fmt.Println("          Taint set automatically on single node")
@@ -100,7 +104,7 @@ func showHelp() {
 	fmt.Println("\nAt least one of -c, -w, or -s must be specified")
 	fmt.Println("The -y flag is required to install Kubernetes and configure the machine as a node")
 	fmt.Println("fk8cli user must have sudo")
-	fmt.Println("Run dnf update before using this utility")
+	fmt.Println("Run dnf update and reboot before using this utility")
 }
 
 // show to-be configuration
@@ -113,13 +117,19 @@ func showConfiguration(cfg *Config) {
 	fmt.Println("      CRI-O version:   ", cfg.Tag())
 	fmt.Println("   Container Runtime")
 	fmt.Println("      crun\n")
-	fmt.Println("PACKAGES:")
+	fmt.Println("REPO PACKAGES:")
 	script.Exec("sudo dnf list " + cfg.Rpms() + " --available").
 		Last(len(cfg.rpms)).
 		FilterLine(func(line string) string {
 			return "   " + line
 		}).
 		Stdout()
+	if cfg.LocalRpms() {
+		fmt.Println("LOCAL RPMS:")
+		for _, rpmname := range cfg.rpmfiles {
+			fmt.Println("   " + rpmname)
+		}
+	}
 	fmt.Println("\nROLES:")
 	if cfg.isControl {
 		var withstr string
@@ -154,11 +164,38 @@ func buildLogFileName(cfg *Config) {
 
 // create array of rpm names to install
 func buildRPMList(cfg *Config) {
+	var reporpms []string
+	// initial pass, manual config
 	k8 := "kubernetes" + cfg.version
-	cfg.rpms = append(cfg.rpms, k8, k8+"-client", k8+"-kubeadm",
+	reporpms = append(reporpms, k8, k8+"-client", k8+"-kubeadm",
 		"cri-o"+cfg.version,
 		"cri-tools"+cfg.version,
 		"crun")
+
+	// build list of local rpm files if flagged
+	// remove duplicates from reporpms list
+	if cfg.localrpms {
+		list, err := filepath.Glob("*.rpm")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if len(list) > 0 {
+			var name string
+			var dups []string
+
+			// build list of duplicates using package name
+			for _, spec := range list {
+				name, err = script.Exec("sudo rpm -qp --qf '{%NAME}' " + spec).String()
+				if err != nil {
+					log.Fatal(err)
+				}
+				dups = append(dups, name)
+			}
+		} else {
+			cfg.localrpms = false
+		}
+	}
+	cfg.rpms = reporpms
 }
 
 // retrieve user name
