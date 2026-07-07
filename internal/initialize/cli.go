@@ -15,13 +15,14 @@ limitations under the License.
 package initialize
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/bitfield/script"
 )
@@ -30,16 +31,21 @@ import (
 func ParseFlags() *Config {
 	cfg := NewConfig()
 
-	flag.BoolVar(&cfg.isControl, "c", cfg.isControl, "Configure as a control plane node")
-	flag.BoolVar(&cfg.isWorker, "w", cfg.isWorker, "Configure as a worker node")
-	flag.BoolVar(&cfg.isSingle, "s", cfg.isSingle, "Configure as a single node (control plane + worker)")
-	flag.BoolVar(&cfg.localrpms, "l", cfg.localrpms, "Install rpms in local directory")
-	flag.BoolVar(&cfg.isQuiet, "q", cfg.isQuiet, "Enable verbose output")
-	flag.BoolVar(&cfg.taint, "taint", cfg.taint, "Set taint on control plane node")
-	flag.BoolVar(&cfg.isGo, "y", cfg.isGo, "Proceed with installation")
+	flag.BoolVarP(&cfg.isControl, "control", "c", cfg.isControl, "Configure as a control plane node")
+	flag.BoolVarP(&cfg.isWorker, "worker", "w", cfg.isWorker, "Configure as a worker node")
+	flag.BoolVarP(&cfg.isSingle, "single", "s", cfg.isSingle, "Configure as a single node (control plane + worker)")
+	flag.BoolVarP(&cfg.localrpms, "local", "l", cfg.localrpms, "Install rpms from the local directory")
+	flag.BoolVarP(&cfg.isQuiet, "quiet", "q", cfg.isQuiet, "Enable verbose output")
+	flag.BoolVarP(&cfg.taint, "taint", "t", cfg.taint, "Set taint on control plane node")
+	flag.BoolVarP(&cfg.isGo, "yes", "y", cfg.isGo, "Proceed with installation")
 
 	flag.Usage = showHelp
 	flag.Parse()
+
+	// check for no args and flags
+	if flag.NFlag() == 0 && flag.NArg() == 0 {
+		showHelpAndExit("No options or version were provided", 0)
+	}
 
 	// check root access
 	checkSudo()
@@ -90,21 +96,23 @@ func showHelp() {
 	fmt.Println("\nUSAGE:")
 	fmt.Println("  fk8cli [options] kubernetes-version")
 	fmt.Println("\nEXAMPLE:")
-	fmt.Println("  $fk8cli -c 1.34")
+	fmt.Println("  $fk8cli -c -y 1.36 - installs a v1.36 control plane without taint")
 	fmt.Println("\nOPTIONS:")
-	fmt.Println("  -c  Configure as a control plane node")
-	fmt.Println("  -w  Configure as a worker node")
-	fmt.Println("  -s  Configure as a single node (control plane + worker)")
-	fmt.Println("  -l  Install rpms from local directory")
-	fmt.Println("      Local rpms replace rpms from repo")
-	fmt.Println("  -q  Enable quiet output")
-	fmt.Println("\n  -taint  Set taint on control plane node")
-	fmt.Println("          Taint set automatically on single node")
-	fmt.Println("\n  -h  Show this help message")
-	fmt.Println("\nAt least one of -c, -w, or -s must be specified")
-	fmt.Println("The -y flag is required to install Kubernetes and configure the machine as a node")
-	fmt.Println("fk8cli user must have sudo")
-	fmt.Println("Run dnf update and reboot before using this utility")
+	fmt.Println("  -y  (--yes)      Execute the installation")
+	fmt.Println("\n  -c  (--control)  Configure as a control plane node")
+	fmt.Println("  -w  (--worker)   Configure as a worker node")
+	fmt.Println("  -s  (--single)   Configure as a single node (control plane + worker)")
+	fmt.Println("  -l  (--locale)   Install rpms from local directory")
+	fmt.Println("                   Local rpms replace rpms from repo")
+	fmt.Println("  -q  (--quiet)    Enable quiet output")
+	fmt.Println("\n  -t (--taint)     Set taint on control plane node")
+	fmt.Println("                   Taint set automatically on single node")
+	fmt.Println("\n  -h (--help)    Show this help message")
+	fmt.Println("\nNotes:")
+	fmt.Println("* At least one of -c, -w, or -s must be specified")
+	fmt.Println("* The -y flag is required to proceed with installation and configuration")
+	fmt.Println("* The fk8cli user must have sudo")
+	fmt.Println("* Run dnf update and reboot before using this utility")
 }
 
 // show to-be configuration

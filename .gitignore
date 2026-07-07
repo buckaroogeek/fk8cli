@@ -29,3 +29,6 @@ go.work.sum
 
 # vim session
 Session.vim
+
+# generated binary
+fk8cli

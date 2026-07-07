@@ -32,7 +32,6 @@ func CheckFedora() {
 }
 
 // sanity check for root permissions
-// exits program with message if not Fedora
 func checkRoot() {
 	if os.Geteuid() != 0 {
 		showHelpAndExit("Root access is required", 1)
@@ -40,7 +39,6 @@ func checkRoot() {
 }
 
 // sanity check for sudo permissions
-// exits program with message if not Fedora
 func checkSudo() {
 	_, err := script.Exec("sudo -n true").String()
 	if err != nil {
