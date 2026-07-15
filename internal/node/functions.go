@@ -46,7 +46,21 @@ func echoConfig(cfg *initialize.Config) error {
 
 // Process an install/configuration step
 func process(cfg *initialize.Config, fn func(cfg *initialize.Config) error, msg string) error {
+	// msg to stdout
 	fmt.Println(" ..." + msg)
+
+	// msg to log file
+	// open log file
+	f, err := os.OpenFile(cfg.FileName(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "\n*** %s ***\n", msg); err != nil {
+		return err
+	}
+	f.Close()
+
+	// execute process function
 	return fn(cfg)
 }
 
@@ -77,10 +91,7 @@ func exec(cmd string, cfg *initialize.Config) error {
 	// If verbose, also print to stdout
 
 	// execute command for this step
-	pipe := script.Exec(cmd)
-	pipe.Wait()
-	output, err := pipe.String()
-
+	output, err := script.Exec(cmd).String()
 	if err != nil {
 		return err
 	}
