@@ -13,10 +13,12 @@ limitations under the License.
 package initialize
 
 import (
-	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/bitfield/script"
 )
@@ -44,6 +46,32 @@ func checkSudo() {
 	if err != nil {
 		showHelpAndExit("Sudo is required", 1)
 	}
+}
+
+// check swap
+// if swap support enabled, add zram-generator to rpm list
+// if swap support disabled, fail if zram-generator is present
+func checkSwap(cfg *Config) {
+	// check for zram-generator, currently installed by default
+	pipe := script.Exec("rpm -q zram-generator")
+	pipe.Wait()
+	zram := pipe.ExitStatus() == 0
+
+	// if zram and cfg.swap identical exit
+	if zram == cfg.swap {
+		return
+	}
+
+	// if zram but swap is false exit
+	if zram {
+		msg := "Execute 'dnf remove zram-generator' and reboot "
+		msg += strconv.FormatBool(zram)
+		msg += " "
+		msg += strconv.FormatBool(cfg.swap)
+		showHelpAndExit(msg, 1)
+	}
+
+	cfg.rpms = append(cfg.rpms, "zram-generator")
 }
 
 // check for extra arguments

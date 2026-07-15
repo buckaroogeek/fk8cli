@@ -46,7 +46,7 @@ func echoConfig(cfg *initialize.Config) error {
 
 // Process an install/configuration step
 func process(cfg *initialize.Config, fn func(cfg *initialize.Config) error, msg string) error {
-	fmt.Println(msg)
+	fmt.Println(" ..." + msg)
 	return fn(cfg)
 }
 
@@ -77,7 +77,9 @@ func exec(cmd string, cfg *initialize.Config) error {
 	// If verbose, also print to stdout
 
 	// execute command for this step
-	output, err := script.Exec(cmd).String()
+	pipe := script.Exec(cmd)
+	pipe.Wait()
+	output, err := pipe.String()
 
 	if err != nil {
 		return err
@@ -98,7 +100,7 @@ func exec(cmd string, cfg *initialize.Config) error {
 
 // install rpms
 func installPackages(cfg *initialize.Config) error {
-	cmd := fmt.Sprintf("dnf install -y %s", cfg.Rpms())
+	cmd := fmt.Sprintf("dnf install -y %s", cfg.Rpms()+cfg.Rpmfiles())
 	return sudoexec(cmd, cfg)
 }
 
@@ -178,7 +180,7 @@ func configureK8S(cfg *initialize.Config) error {
 	}
 
 	// set taint if toggled
-	if cfg.SetTaint() {
+	if cfg.GetTaint() {
 		cmd = "kubectl taint nodes --all node-role.kubernetes.io/control-plane-"
 		err = exec(cmd, cfg)
 		if err != nil {

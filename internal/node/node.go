@@ -38,7 +38,7 @@ func Install(cfg *initialize.Config) error {
 	echoConfig(cfg)
 
 	// install packages
-	err := process(cfg, installPackages, "Install packages")
+	err := process(cfg, installPackages, "Install all packages")
 	if err != nil {
 		return err
 	}

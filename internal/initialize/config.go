@@ -14,6 +14,8 @@ limitations under the License.
 package initialize
 
 import (
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -26,14 +28,16 @@ type Config struct {
 	isSingle  bool
 	isWorker  bool
 	localrpms bool
-	rpmfiles  []string
+	rpmfiles  map[string]string
 	rpms      []string
+	swap      bool
 	taint     bool
 	user      string
 	version   string
 }
 
 // Config constructor with explicit defaults
+// rpmfiles initialize to empty map, replaced later if needed
 func NewConfig() *Config {
 	cfg := &Config{
 		isControl: false,
@@ -42,6 +46,9 @@ func NewConfig() *Config {
 		isSingle:  false,
 		isQuiet:   false,
 		localrpms: false,
+		rpms:      make([]string, 20),
+		rpmfiles:  make(map[string]string),
+		swap:      false,
 		taint:     false,
 		version:   "none",
 	}
@@ -50,6 +57,16 @@ func NewConfig() *Config {
 }
 
 // Methods
+
+// Add rpm to rpms slice
+func (cfg *Config) AddRPM(name string) {
+	// check name in list of rpms from local filesystem
+	// list can be empty
+	_, found := cfg.rpmfiles[name]
+	if !found {
+		cfg.rpms = append(cfg.rpms, name)
+	}
+}
 
 // Return log file name
 func (cfg *Config) FileName() string {
@@ -68,16 +85,21 @@ func (cfg *Config) LocalRpms() bool {
 
 // Return list of local rpmfiles as single string
 func (cfg *Config) Rpmfiles() string {
-	return strings.Join(cfg.rpmfiles, " ")
+	if cfg.localrpms {
+		prefix := " ./"
+		values := slices.Collect(maps.Values(cfg.rpmfiles))
+		return prefix + strings.Join(values, prefix)
+	}
+	return ""
 }
 
-// Return list of rpms as single string
+// Return list of repo rpms as single string
 func (cfg *Config) Rpms() string {
 	return strings.Join(cfg.rpms, " ")
 }
 
 // Return taint boolean
-func (cfg *Config) SetTaint() bool {
+func (cfg *Config) GetTaint() bool {
 	return cfg.taint
 }
 

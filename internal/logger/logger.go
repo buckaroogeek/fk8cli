@@ -11,6 +11,10 @@ limitations under the License.
 
 // Sets up logging - log (eventually) to file and to
 // stdout if verbose
+//
+// logging notes
+// routine msgs to standard out track progress, any errors
+// log file is a record of what is installed and when, duplicates standard out
 
 package logger
 

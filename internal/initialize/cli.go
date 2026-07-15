@@ -15,6 +15,7 @@ limitations under the License.
 package initialize
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -36,6 +37,7 @@ func ParseFlags() *Config {
 	flag.BoolVarP(&cfg.isSingle, "single", "s", cfg.isSingle, "Configure as a single node (control plane + worker)")
 	flag.BoolVarP(&cfg.localrpms, "local", "l", cfg.localrpms, "Install rpms from the local directory")
 	flag.BoolVarP(&cfg.isQuiet, "quiet", "q", cfg.isQuiet, "Enable verbose output")
+	flag.BoolVarP(&cfg.swap, "swap", "a", cfg.swap, "Enable swap support")
 	flag.BoolVarP(&cfg.taint, "taint", "t", cfg.taint, "Set taint on control plane node")
 	flag.BoolVarP(&cfg.isGo, "yes", "y", cfg.isGo, "Proceed with installation")
 
@@ -46,6 +48,12 @@ func ParseFlags() *Config {
 	if flag.NFlag() == 0 && flag.NArg() == 0 {
 		showHelpAndExit("No options or version were provided", 0)
 	}
+
+	// Create logfile name
+	buildLogFileName(cfg)
+
+	// check swap status
+	checkSwap(cfg)
 
 	// check root access
 	checkSudo()
@@ -72,9 +80,6 @@ func ParseFlags() *Config {
 	// Check for version argument
 	checkVersion(cfg)
 
-	// Create logfile name
-	buildLogFileName(cfg)
-
 	// Build list of rpms to install
 	buildRPMList(cfg)
 
@@ -98,16 +103,17 @@ func showHelp() {
 	fmt.Println("\nEXAMPLE:")
 	fmt.Println("  $fk8cli -c -y 1.36 - installs a v1.36 control plane without taint")
 	fmt.Println("\nOPTIONS:")
-	fmt.Println("  -y  (--yes)      Execute the installation")
-	fmt.Println("\n  -c  (--control)  Configure as a control plane node")
-	fmt.Println("  -w  (--worker)   Configure as a worker node")
-	fmt.Println("  -s  (--single)   Configure as a single node (control plane + worker)")
-	fmt.Println("  -l  (--locale)   Install rpms from local directory")
-	fmt.Println("                   Local rpms replace rpms from repo")
-	fmt.Println("  -q  (--quiet)    Enable quiet output")
-	fmt.Println("\n  -t (--taint)     Set taint on control plane node")
-	fmt.Println("                   Taint set automatically on single node")
-	fmt.Println("\n  -h (--help)    Show this help message")
+	fmt.Println("  -y  --yes      Execute the installation")
+	fmt.Println("\n  -c  --control  Configure as a control plane node")
+	fmt.Println("  -w  --worker   Configure as a worker node")
+	fmt.Println("  -s  --single   Configure as a single node (control plane + worker)")
+	fmt.Println("  -l  --locale   Install rpms from local directory")
+	fmt.Println("                 Local rpms installed instead of rpms from repo")
+	fmt.Println("  -q  --quiet    Enable quiet output")
+	fmt.Println("\n  -a  --swap     Add support for swap")
+	fmt.Println("  -t  --taint    Set taint on control plane node")
+	fmt.Println("                 Taint set automatically on single node")
+	fmt.Println("\n  -h  --help     Show this help message")
 	fmt.Println("\nNotes:")
 	fmt.Println("* At least one of -c, -w, or -s must be specified")
 	fmt.Println("* The -y flag is required to proceed with installation and configuration")
@@ -125,15 +131,17 @@ func showConfiguration(cfg *Config) {
 	fmt.Println("      CRI-O version:   ", cfg.Tag())
 	fmt.Println("   Container Runtime")
 	fmt.Println("      crun\n")
+
+	// dnf output
 	fmt.Println("REPO PACKAGES:")
-	script.Exec("sudo dnf list " + cfg.Rpms() + " --available").
-		Last(len(cfg.rpms)).
-		FilterLine(func(line string) string {
-			return "   " + line
-		}).
-		Stdout()
+	// fmt.Println("   dnf string: " + cfg.Rpms())
+	script.Exec("sudo dnf list " + cfg.Rpms()).FilterLine(func(line string) string {
+		return "   " + line
+	}).Stdout()
+
+	// local rpms if any
 	if cfg.LocalRpms() {
-		fmt.Println("LOCAL RPMS:")
+		fmt.Println("\nLOCAL RPMS:")
 		for _, rpmname := range cfg.rpmfiles {
 			fmt.Println("   " + rpmname)
 		}
@@ -142,7 +150,7 @@ func showConfiguration(cfg *Config) {
 	if cfg.isControl {
 		var withstr string
 		withstr = " without"
-		if cfg.SetTaint() {
+		if cfg.GetTaint() {
 			withstr = " with"
 		}
 		fmt.Println("   Control plane" + withstr + " taint")
@@ -172,13 +180,6 @@ func buildLogFileName(cfg *Config) {
 
 // create array of rpm names to install
 func buildRPMList(cfg *Config) {
-	var reporpms []string
-	// initial pass, manual config
-	k8 := "kubernetes" + cfg.version
-	reporpms = append(reporpms, k8, k8+"-client", k8+"-kubeadm",
-		"cri-o"+cfg.version,
-		"cri-tools"+cfg.version,
-		"crun")
 
 	// build list of local rpm files if flagged
 	// remove duplicates from reporpms list
@@ -188,22 +189,39 @@ func buildRPMList(cfg *Config) {
 			log.Fatal(err)
 		}
 		if len(list) > 0 {
-			var name string
-			var dups []string
+			// replace rpmfiles map using list size
+			cfg.rpmfiles = make(map[string]string, len(list))
 
-			// build list of duplicates using package name
+			// build map of package names extracted from rpm name
 			for _, spec := range list {
-				name, err = script.Exec("sudo rpm -qp --qf '{%NAME}' " + spec).String()
+				name, err := script.Exec("rpm -qp --qf '%{NAME}' " + spec).String()
 				if err != nil {
 					log.Fatal(err)
 				}
-				dups = append(dups, name)
+				// fmt.Println(name, " ", spec)
+				cfg.rpmfiles[name] = spec
 			}
 		} else {
-			cfg.localrpms = false
+			err := errors.New("Local rpms selected for install but none found")
+			log.Fatal(err)
 		}
+		// fmt.Println(cfg.rpmfiles)
 	}
-	cfg.rpms = reporpms
+
+	// build list of rpms to install from repo, filtering by
+	// list of rpms to be installed from filesystem
+	// kubernetes rpms
+	k8 := "kubernetes" + cfg.version
+	cfg.AddRPM(k8)
+	cfg.AddRPM(k8 + "-client")
+	cfg.AddRPM(k8 + "-kubeadm")
+
+	// CRI and crictl
+	cfg.AddRPM("cri-o" + cfg.version)
+	cfg.AddRPM("cri-tools" + cfg.version)
+
+	// container runtime
+	cfg.AddRPM("crun")
 }
 
 // retrieve user name
